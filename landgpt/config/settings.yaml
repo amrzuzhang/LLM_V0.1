@@ -1,0 +1,33 @@
+# LandBench 预处理与 GPTCast 训练的统一配置示例
+paths:
+  raw_data: /home/xiezhenang/data/LandBench
+  preprocessed: /home/xiezhenang/landgpt/outputs
+
+landbench:
+  inputs_path: /home/xiezhenang/landgpt/outputs/
+  nc_data_path: /home/xiezhenang/data/LandBench
+  product: ""
+  workname: LandBench
+  spatial_resolution: 1
+  selected_year: [2010, 2020]
+  test_year: [2020]
+  memmap: true
+  normalize: true
+  batch_size: 128
+  niter: 1200
+  split_ratio: 0.8
+  min_valid_obs: 30
+  min_valid_std: 0.0001
+  seq_len: 365
+  forcast_time: 1
+
+gptcast:
+  resolution: 1
+  device: gpu
+  device_count: 1
+  years: [2015, 2016, 2017, 2018, 2019, 2020]
+  batch_size: 4
+  learning_rate: 0.0001
+  max_epochs: 50
+  val_ratio: 0.1
+  test_ratio: 0.1

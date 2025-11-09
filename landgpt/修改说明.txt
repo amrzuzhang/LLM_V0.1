@@ -1,0 +1,59 @@
+修改说明
+========
+
+1. 目录与依赖整理
+   - 将 `gptcast/` 包置于仓库根目录，移除无关的旧 GPTCast 文件，仅保留土壤湿度相关代码。
+   - 新增根目录 `requirements.txt`、`install_landgpt.sh`、`README.zh.md` 及 `landbench/README.md`，统一环境与数据放置说明。
+   - 在 Linux/Windows 双环境中使用 `python -m gptcast.run.*` 方式运行脚本，避免 `PYTHONPATH` 问题。
+
+2. 配置与路径解析
+   - `gptcast/config.py` 新增默认分辨率、设备、数据根目录智能识别逻辑，自动兼容 `landbench/adhub/...` 与 `adhub/...` 结构，并支持 `LANDGPT_*` 环境变量。
+   - `gptcast/run/train_soil_moisture.py`、`gptcast/run/eval_soil_moisture.py` 新增 `--resolution` 参数、路径兼容性处理，以及脚本运行时自动添加项目根目录到 `sys.path`。
+
+3. 数据集适配
+   - `gptcast/data/landbench_dataset.py` 支持 `xarray.open_mfdataset` 自动回退到 `combine="nested"` + `concat_dim="time"`，并对时间维度排序，解决 LandBench 多文件拼接失败问题。
+   - 增加详细注释与配置说明，明确返回张量格式及特征通道信息。
+
+4. 模型与基线
+   - 重写 `gptcast/models/gptcast.py`，实现 CNN + Transformer 的土壤湿度回归模型，并提供持久化基线与 ConvLSTM 基线（`gptcast/baselines/`）。
+   - 新增 `gptcast/models/feature_fusion.py`、`gptcast/models/output.py` 模块化特征融合和输出头逻辑。
+
+5. 文档更新
+   - `README.zh.md` 说明数据目录结构、命令使用（改为 `python -m ...`），并补充分辨率与 GPU 默认设置。
+   - `landbench/README.md` 提示数据摊放层级，方便在 Linux 部署时直接复制。
+
+6. 运行验证
+   - 多次执行 `python -m compileall gptcast` 验证语法正确。
+   - 根目录添加 `landbench/` 示例结构以提示数据位置，保持 `adhub/` 仍可用。
+
+2025-11-06
+- 新增 LandBench 数据加载兼容逻辑：逐个文件拼接，自动处理 `day`/`time` 维度，并保持时间排序。
+- 更新配置系统，自动识别 `landbench/adhub/...` 与 `adhub/...` 路径，并支持默认分辨率/设备设置。
+- README 改为推荐 `python -m gptcast.run.*` 的运行方式，数据目录说明同步更新。
+
+2025-11-07
+- 恢复 `landbench/src/` 原始代码结构，官方脚本重新负责数据预处理。
+- 新增统一配置 `config/settings.yaml`，LandBench 与 GPTCast 共享路径、年份、设备等参数。
+- 删除 `gptcast/data/preprocess_landbench.py`，README 改为指导用户运行 `landbench/src/main.py`。
+- `gptcast/config.py` 与 `landbench/src/config.py` 支持读取 YAML，项目依赖新增 `PyYAML`。
+- `gptcast/data/landbench_dataset.py` 直接读取 LandBench 产出的 `x_train_norm.npy`、`x_test_norm.npy`、`static_norm.npy` 等 memmap 文件，通过 `--subset` 控制 train/test 切片。
+- 训练/评估脚本新增 `--subset` 选项，并将 `log_every_n_steps` 调整为 1 以便实时观察损失。
+- README 详述“先预处理、再训练”的流程，命令示例改为多行形式并引用统一配置文件。
+
+2025-11-08
+- 引入 `landbench/src/path_utils.py` 统一分辨率相关的路径/文件名，训练与后处理都能在 `1` 与 `1.0` 之间自动匹配到同一个 outputs 目录。
+- `postprocess.py` 增加 `min_valid_obs`/`min_valid_std` 筛选逻辑，并使用 `_save_with_report` 输出保存位置与统计信息，方便排查无效像素。
+- `plot_test.py` 现在会将所有图像保存到 `outputs/<resolution>/<workname>/<modelname>/focast_time X/figures/`，并支持 `--plot_figures box spatial metrics timeseries` 等组合来选择要绘制的子图。
+
+2025-11-09
+- `gptcast/data/landbench_dataset.py` 支持加载 LandBench mask 并在模型输入中自动屏蔽海洋像元，确保训练与 LandBench 评价一致。
+- README 新增 GPTCast 面积加权说明，提醒在 `outputs/` 中保留 `Mask with <resolution> spatial resolution.npy`。
+- 新增 `gptcast/utils/hydrology.py` 及 `--lambda-hyd` 超参，Lightning 训练日志输出 `*_hydro_penalty` 以便调节 ΔSM≈P-ET-R 正则强度。
+- `gptcast/data/landbench_dataset.py` 现同时加载 `y_*_norm.npy`，为样本提供 `SM_t`、`P/ET/R` 以及 `valid_mask`，Hydro 正则与评估可据此启用或跳过缺项。
+- README/GPTCast 命令示例补充了 `--use-area-weighted-loss`、`--lambda-hyd` 说明，使用者可直接复制命令开关面积加权或水文正则训练。
+
+2025-11-10
+- `gptcast/models/output.py` 新增 `QuantileHead`，`SoilMoistureGPTCast` 通过 `--uncertainty=quantile` 输出 q05/q50/q95，并用 pinball loss 训练。
+- 训练脚本加入 `--uncertainty`、`--quantiles`，评估脚本在量化模式下自动回退到中位数做 RMSE。
+- `gptcast/metrics/calibration.py` 与 `gptcast/run/eval_calibration.py` 提供 CRPS、PIT 与可靠度曲线，生成 `calibration/*.png` 与 `metrics_calibration.json`。
+- 文档补充如何训练/评估分位数模型，满足“生成 PIT/可靠度图与 CRPS 数值”的验收。
